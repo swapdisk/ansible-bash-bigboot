@@ -1,0 +1,78 @@
+- name: Extend boot partition playbook
+  hosts: rhel
+  debugger: on_failed
+  become: true
+  vars:
+    extend_device_name_parameter: extend.device
+    extend_device_size_parameter: extend.size
+    backup_extension: backup
+  pre_tasks:
+  - setup:
+      gather_subset: 
+        - 'mounts'
+        - 'kernel'    
+  tasks:
+   - name: Capture boot device name
+     ansible.builtin.set_fact:
+      device_name: "{{ ansible_facts.mounts|selectattr('mount','equalto','/boot')|map(attribute='device')|first | regex_replace('[0-9]*','')}}"
+
+   - name: Get kernel version
+     ansible.builtin.set_fact:
+      kernel_version: "{{ ansible_facts.kernel }}" 
+         
+   - name: Remove existing kernel option to external device
+     ansible.builtin.command: /usr/sbin/grubby --remove-args={{extend_device_name_parameter}} --update-kernel /boot/vmlinuz-{{kernel_version}}
+    
+   - name: Remove existing kernel option to size
+     ansible.builtin.command: /usr/sbin/grubby --remove-args={{extend_device_size_parameter}} --update-kernel /boot/vmlinuz-{{kernel_version}}
+
+   - name: Add kernel option to external device
+     ansible.builtin.command: /usr/sbin/grubby --args={{extend_device_name_parameter}}={{device_name}} --update-kernel /boot/vmlinuz-{{kernel_version}}
+    
+   - name: Add kernel option to size
+     ansible.builtin.command: /usr/sbin/grubby --args={{extend_device_size_parameter}}=1G --update-kernel /boot/vmlinuz-{{kernel_version}}
+
+   - name: Create a backup of the current initramfs
+     ansible.builtin.copy:
+      remote_src: True
+      src: /boot/initramfs-{{kernel_version}}.img
+      dest: /boot/initramfs-{{kernel_version}}.img.{{backup_extension}}
+  
+   - name: Copy extend boot initramfs over the current one
+     ansible.builtin.copy:
+      src: /tmp/initramfs-ripu.img
+      dest: /boot/initramfs-{{kernel_version}}.img
+  
+   - name: Reboot the server
+     ansible.builtin.reboot:
+
+   - name: Wait for the reboot and reconnect
+     become: false
+     vars:
+      ansible_python_interpreter: /opt/homebrew/bin/python3
+     wait_for:
+      port: 2022
+      host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'
+      search_regex: OpenSSH
+      delay: 10
+      timeout: 300
+     connection: local
+
+  #  - name: Retrieve extend log
+   
+   - name: Register backup file status
+     stat:
+      path: /boot/initramfs-{{kernel_version}}.img.{{backup_extension}}
+     register: backup_stat
+
+   - name: Remove backup initramfs
+     file: 
+      path: /boot/initramfs-{{kernel_version}}.img.{{backup_extension}}
+      state: absent
+     when: backup_stat.stat.exists
+  
+   - name: Remove kernel option to external device
+     ansible.builtin.command: /usr/sbin/grubby --remove-args={{extend_device_name_parameter}} --update-kernel /boot/vmlinuz-{{kernel_version}}
+    
+   - name: Remove kernel option to size
+     ansible.builtin.command: /usr/sbin/grubby --remove-args={{extend_device_size_parameter}} --update-kernel /boot/vmlinuz-{{kernel_version}}
