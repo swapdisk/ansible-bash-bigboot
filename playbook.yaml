@@ -5,7 +5,8 @@
   vars:
     extend_device_name_parameter: extend.device
     extend_device_size_parameter: extend.size
-    backup_extension: backup
+    backup_extension: old
+    dracut_module_files: /Users/jgil/tmp/ripu/
   pre_tasks:
   - setup:
       gather_subset: 
@@ -38,10 +39,14 @@
       src: /boot/initramfs-{{kernel_version}}.img
       dest: /boot/initramfs-{{kernel_version}}.img.{{backup_extension}}
   
-   - name: Copy extend boot initramfs over the current one
+   - name: Copy extend boot dracut module
      ansible.builtin.copy:
-      src: /tmp/initramfs-ripu.img
-      dest: /boot/initramfs-{{kernel_version}}.img
+      src: "{{ dracut_module_files }}"
+      dest: /usr/lib/dracut/modules.d/99extend_boot
+      mode: 554
+
+   - name: Create a new initramfs with the extend boot module
+     ansible.builtin.command: /usr/sbin/dracut -a extend_boot --kver {{ kernel_version }} --force
   
    - name: Reboot the server
      ansible.builtin.reboot:
@@ -58,21 +63,23 @@
       timeout: 300
      connection: local
 
-  #  - name: Retrieve extend log
-   
-   - name: Register backup file status
-     stat:
-      path: /boot/initramfs-{{kernel_version}}.img.{{backup_extension}}
-     register: backup_stat
-
-   - name: Remove backup initramfs
-     file: 
-      path: /boot/initramfs-{{kernel_version}}.img.{{backup_extension}}
-      state: absent
-     when: backup_stat.stat.exists
-  
    - name: Remove kernel option to external device
      ansible.builtin.command: /usr/sbin/grubby --remove-args={{extend_device_name_parameter}} --update-kernel /boot/vmlinuz-{{kernel_version}}
     
    - name: Remove kernel option to size
      ansible.builtin.command: /usr/sbin/grubby --remove-args={{extend_device_size_parameter}} --update-kernel /boot/vmlinuz-{{kernel_version}}
+
+   - name: Restore previous initramfs
+     ansible.builtin.copy:
+      remote_src: True
+      src: /boot/initramfs-{{kernel_version}}.img.{{backup_extension}}
+      dest: /boot/initramfs-{{kernel_version}}.img
+
+   - name: Remove initramfs backup file
+     ansible.builtin.file:
+      path: /boot/initramfs-{{kernel_version}}.img.{{backup_extension}}
+      state: absent
+   - name: Remove dracut extend boot module
+     ansible.builtin.file:
+      path: /usr/lib/dracut/modules.d/99extend_boot
+      state: absent
