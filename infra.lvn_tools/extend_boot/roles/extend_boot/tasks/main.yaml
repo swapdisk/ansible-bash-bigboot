@@ -46,6 +46,8 @@
       post_reboot_delay: 300
    - name: Wait for the host to reboot
      become: false
+     vars:
+      ansible_python_interpreter: /opt/homebrew/bin/python3
      ansible.builtin.wait_for:
       port: "{{ hostvars[inventory_hostname].ansible_port | default(22) }}"
       host: "{{ inventory_hostname }}"
