@@ -23,11 +23,6 @@ authors:
 # A short summary description of the collection
 description: Extends the boot partition and file system of a BIOS system by taking advantage of the available PE in the adjacent LVM partition.
 
-# Either a single license or a list of licenses for content inside of a collection. Ansible Galaxy currently only
-# accepts L(SPDX,https://spdx.org/licenses/) licenses. This key is mutually exclusive with 'license_file'
-license:
-- Apache License
-
 # The path to the license file for the collection. This path is relative to the root of the collection. This key is
 # mutually exclusive with 'license'
 license_file: 'LICENSE'
