@@ -66,13 +66,13 @@ main() {
     parse_kernelops
     get_boot_partition_number
     disable_lvm_lock
-    # run extend.sh to increase boot partition and file system size
-    ret=$(sh /usr/bin/extend.sh "$EXTEND_DEVICE" "$EXTEND_SIZE")
+    # run bigboot.sh to increase boot partition and file system size
+    ret=$(sh /usr/bin/bigboot.sh "$EXTEND_DEVICE" "$EXTEND_SIZE")
     status=$?
     end=$(/usr/bin/date +%s)
     # write the log file
     if [[ $status -eq 0 ]]; then
-        echo "[$name] Boot partition $EXTEND_DEVICE$BOOT_PARTITION_NUMBER successfully extended by $EXTEND_SIZE ("$((end-start))" seconds) " >/dev/kmsg
+        echo "[$name] Boot partition $EXTEND_DEVICE$BOOT_PARTITION_NUMBER successfully increased by $EXTEND_SIZE ("$((end-start))" seconds) " >/dev/kmsg
     else
         echo "[$name] Failed to extend boot partition: $ret ("$((end-start))" seconds)" >/dev/kmsg
     fi

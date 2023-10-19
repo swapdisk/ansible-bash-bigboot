@@ -1,4 +1,0 @@
-extend_boot_device_name_parameter: extend.device
-extend_boot_size_parameter: extend.size
-extend_boot_backup_extension: old
-extend_boot_size:

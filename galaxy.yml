@@ -2,10 +2,10 @@
 # The namespace of the collection. This can be a company/brand/organization or product namespace under which all
 # content lives. May only contain alphanumeric lowercase characters and underscores. Namespaces cannot start with
 # underscores or numbers and cannot contain consecutive underscores
-namespace: infra.lvn_tools
+namespace: infra
 
 # The name of the collection. Has the same character restrictions as 'namespace'
-name: extend_boot
+name: bigboot
 
 # The version of the collection. Must be compatible with semantic versioning
 version: 1.0.0
@@ -21,7 +21,7 @@ authors:
 
 ### OPTIONAL but strongly recommended
 # A short summary description of the collection
-description: Extends the boot partition and file system of a BIOS system by taking advantage of the available PE in the adjacent LVM partition.
+description: Increases the boot partition and file system of a BIOS system by taking advantage of the available PE in the adjacent LVM partition.
 
 # The path to the license file for the collection. This path is relative to the root of the collection. This key is
 # mutually exclusive with 'license'

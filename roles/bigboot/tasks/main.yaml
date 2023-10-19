@@ -2,10 +2,10 @@
 - name: Extend boot partition
   become: true
   block:
-   - name: Validate extend_boot_size is not empty
+   - name: Validate bigboot_size is not empty
      ansible.builtin.assert:
-      that: extend_boot_size | length >0
-      fail_msg: "extend_boot_size is empty"
+      that: bigboot_size | length >0
+      fail_msg: "bigboot_size is empty"
    - name: Capture boot device name
      ansible.builtin.set_fact:
       extend_device_name:
@@ -14,24 +14,24 @@
      ansible.builtin.set_fact:
       kernel_version: "{{ ansible_facts.kernel }}"
    - name: Remove existing kernel option to external device
-     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ extend_boot_device_name_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
+     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ bigboot_device_name_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
      changed_when: true
    - name: Remove existing kernel option to size
-     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ extend_boot_size_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
+     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ bigboot_size_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
      changed_when: true
    - name: Add kernel option to external device
-     ansible.builtin.command: /usr/sbin/grubby --args={{ extend_boot_device_name_parameter }}={{ extend_device_name }}
+     ansible.builtin.command: /usr/sbin/grubby --args={{ bigboot_device_name_parameter }}={{ extend_device_name }}
        --update-kernel /boot/vmlinuz-{{ kernel_version }}
      changed_when: true
    - name: Add kernel option to size
-     ansible.builtin.command: /usr/sbin/grubby --args={{ extend_boot_size_parameter }}={{ extend_boot_size }}
+     ansible.builtin.command: /usr/sbin/grubby --args={{ bigboot_size_parameter }}={{ bigboot_size }}
        --update-kernel /boot/vmlinuz-{{ kernel_version }}
      changed_when: true
    - name: Create a backup of the current initramfs
      ansible.builtin.copy:
       remote_src: true
       src: /boot/initramfs-{{ kernel_version }}.img
-      dest: /boot/initramfs-{{ kernel_version }}.img.{{ extend_boot_backup_extension }}
+      dest: /boot/initramfs-{{ kernel_version }}.img.{{ bigboot_backup_extension }}
       mode: "0600"
    - name: Copy extend boot dracut module
      ansible.builtin.copy:
@@ -46,20 +46,20 @@
       post_reboot_delay: 300
    - name: Remove kernel option for external device
      ansible.builtin.command: /usr/sbin/grubby
-       --remove-args={{ extend_boot_device_name_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
+       --remove-args={{ bigboot_device_name_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
      changed_when: true
    - name: Remove kernel option for size
-     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ extend_boot_size_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
+     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ bigboot_size_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
      changed_when: true
    - name: Restore previous initramfs
      ansible.builtin.copy:
       remote_src: true
-      src: /boot/initramfs-{{ kernel_version }}.img.{{ extend_boot_backup_extension }}
+      src: /boot/initramfs-{{ kernel_version }}.img.{{ bigboot_backup_extension }}
       dest: /boot/initramfs-{{ kernel_version }}.img
       mode: "0600"
    - name: Remove initramfs backup file
      ansible.builtin.file:
-      path: /boot/initramfs-{{ kernel_version }}.img.{{ extend_boot_backup_extension }}
+      path: /boot/initramfs-{{ kernel_version }}.img.{{ bigboot_backup_extension }}
       state: absent
    - name: Remove dracut extend boot module
      ansible.builtin.file:
