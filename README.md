@@ -1,5 +1,5 @@
 # ansible-bash-bigboot
-Ansible role that runs the extend boot partition script. The role contains the shell scripts to increase the size of the boot partition, as well as the script wrapping it to run as part of the pre-mount step during the boot process.
+Ansible role that runs the increase boot partition script. The role contains the shell scripts to increase the size of the boot partition, as well as the script wrapping it to run as part of the pre-mount step during the boot process.
 Finally, there is a copy of the `sfdisk` binary with version 2.38.1 to ensure the extend script will work regardless of the `util-linux` package installed in the target host. 
 
 
