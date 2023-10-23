@@ -1,2 +1,2 @@
-# ansible-bash-extend-boot
-Ansible playbook that prepares the environment to run the extend boot partition script
+# ansible-bash-big-boot
+Ansible playbook that prepares the environment to run the increase boot partition script
