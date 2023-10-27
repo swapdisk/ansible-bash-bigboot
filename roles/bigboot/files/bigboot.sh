@@ -133,7 +133,6 @@ parse_flags() {
     validate_increment_partition_size "$2"
 }
 
-
 get_fs_type(){
     local device=$1
     ret=$(/usr/sbin/blkid "$device" -o udev | sed -n -e 's/ID_FS_TYPE=//p' 2>&1)
@@ -143,7 +142,6 @@ get_fs_type(){
     fi
     echo "$ret"
 }
-
 
 ensure_extendable_fs_type(){
     local device=$1
@@ -208,8 +206,6 @@ init_variables(){
     get_successive_partition_number
 }
 
-
-
 check_filesystem(){
     local device=$1
     fstype=$(get_fs_type "$device")
@@ -217,11 +213,13 @@ check_filesystem(){
      echo "Warning: cannot run fsck to a swap partition for $device"
      return 0
     fi
-    # Retrieve the estimated minimum size in bytes that the device can be shrank
-    ret=$(/usr/sbin/e2fsck -fy "$device" 2>&1)
-    local status=$?
-    if [[ status -ne 0 ]]; then
-        echo "Warning: File system check failed for $device: $ret"
+    if [[ "$BOOT_FS_TYPE" == "ext4" ]]; then
+        # Retrieve the estimated minimum size in bytes that the device can be shrank
+        ret=$(/usr/sbin/e2fsck -fy "$device" 2>&1)
+        local status=$?
+        if [[ status -ne 0 ]]; then
+            echo "Warning: File system check failed for $device: $ret"
+        fi
     fi
 }
 
@@ -255,6 +253,7 @@ get_volume_group_name(){
     fi
     echo "$ret"
 }
+
 deactivate_volume_group(){
     local volume_group_name
     volume_group_name=$(get_volume_group_name)
@@ -267,7 +266,6 @@ deactivate_volume_group(){
     # avoid potential deadlocks with udev rules before continuing
     sleep 1
 }
-
 
 check_available_free_space(){
     local device=$DEVICE_NAME$ADJACENT_PARTITION_NUMBER
@@ -282,13 +280,17 @@ check_available_free_space(){
     if [[ "$device_type" == "lvm" ]]; then
         # there is not enough free space after the adjacent partition, calculate how much extra space is needed
         # to be fred from the PV
+        local volume_group_name
+        volume_group_name=$(get_volume_group_name)        
         pe_size_in_bytes=$(/usr/sbin/lvm pvdisplay "$device" --units b| /usr/bin/awk 'index($0,"PE Size") {print $3}')
         unusable_space_in_pv_in_bytes=$(/usr/sbin/lvm pvdisplay --units B "$device" | /usr/bin/awk 'index($0,"not usable") {print $(NF-1)}'|/usr/bin/numfmt --from=iec)
-        free_pe_count=$(/usr/sbin/lvm pvdisplay --units B "$device" | /usr/bin/awk 'index($0,"Free PE") {print $3}')
+        total_pe_count_in_vg=$(/usr/sbin/lvm vgs "$volume_group_name" -o pv_pe_count --noheadings)
+        allocated_pe_count_in_vg=$(vgs "$volume_group_name" -o pv_pe_alloc_count --noheadings)
+        free_pe_count=$((total_pe_count_in_vg - allocated_pe_count_in_vg))
         # factor in the unusable space to match the required number of free PEs
         required_pe_count=$(((SHRINK_SIZE_IN_BYTES+unusable_space_in_pv_in_bytes)/pe_size_in_bytes))
         if [[ $required_pe_count -gt $free_pe_count ]]; then
-            echo "Not enough available free PE in $device: Required $required_pe_count but found $free_pe_count"
+            echo "Not enough available free PE in VG $volume_group_name: Required $required_pe_count but found $free_pe_count"
             exit 1
         fi
     fi
@@ -312,7 +314,6 @@ resolve_device_name(){
     fi
 }
 
-
 check_device(){
     local device=$DEVICE_NAME$ADJACENT_PARTITION_NUMBER
     resolve_device_name
@@ -331,7 +332,6 @@ evict_end_PV() {
     fi
     check_filesystem "$LOGICAL_VOLUME_DEVICE_NAME"
 }
-
 
 shrink_physical_volume() {
     local device=$DEVICE_NAME$ADJACENT_PARTITION_NUMBER
@@ -355,6 +355,7 @@ shrink_physical_volume() {
             exit $status
         fi
     fi
+    echo "Shrinking PV $device to $pv_new_size_in_bytes bytes" >&2
     ret=$(/usr/sbin/lvm pvresize --setphysicalvolumesize "$pv_new_size_in_bytes"B "$device" -y 2>&1)
     status=$?
     if [[ $status -ne 0 ]]; then
@@ -381,6 +382,7 @@ calculate_new_end_partition_size_in_bytes(){
 shrink_partition() {
     local partition_number=$1
     new_end_partition_size_in_bytes=$(calculate_new_end_partition_size_in_bytes "$partition_number")
+    echo "Shrinking partition $partition_number in $DEVICE_NAME" >&2
     ret=$(echo Yes | /usr/sbin/parted "$DEVICE_NAME" ---pretend-input-tty unit B resizepart "$partition_number" "$new_end_partition_size_in_bytes" 2>&1 )
     status=$?
     if [[ $status -ne 0 ]]; then
@@ -388,7 +390,6 @@ shrink_partition() {
         exit 1
     fi
 }
-
 
 shrink_adjacent_partition(){
     if [[ $SHRINK_SIZE_IN_BYTES -eq 0 ]]; then
@@ -415,6 +416,7 @@ shift_adjacent_partition() {
     if [[ -n "$EXTENDED_PARTITION_NUMBER" ]]; then
         target_partition=$EXTENDED_PARTITION_NUMBER
     fi
+    echo "Moving up partition $target_partition in $DEVICE_NAME by $INCREMENT_BOOT_PARTITION_SIZE" >&2
     ret=$(echo "+$INCREMENT_BOOT_PARTITION_SIZE,"| /usr/sbin/sfdisk --move-data "$DEVICE_NAME" -N "$target_partition" --force 2>&1)
     status=$?
     if [[ status -ne 0 ]]; then
@@ -445,37 +447,48 @@ update_kernel_partition_tables(){
 }
 
 increase_boot_partition() {
-    # Resize the boot partition by extending it to take the available space: parted <device> resizepart <partition number> +<extra size>/ check sfdisk as an alternative option)
-    # The + tells it to shift the end to the right.
-    # If the boot partition is effectivelly the last one, we're shifting the boot partition left, and then taking over the same amount of shifted space to the right,
-    # essentially increasing the boot partition by as much as $INCREMENT_BOOT_PARTITION_SIZE
     local device=$DEVICE_NAME$BOOT_PARTITION_NUMBER
+    local new_fs_size_in_blocks=
+    echo "Increasing boot partition $BOOT_PARTITION_NUMBER in $DEVICE_NAME by $INCREMENT_BOOT_PARTITION_SIZE" >&2
     ret=$(echo "- +"| /usr/sbin/sfdisk "$DEVICE_NAME" -N "$BOOT_PARTITION_NUMBER" --no-reread --force 2>&1)
     status=$?
     if [[ $status -ne 0 ]]; then
         echo "Failed to shift boot partition '$device': $ret"
         return
     fi
-    check_filesystem "$device"
     update_kernel_partition_tables
     # Extend the boot file system with `resize2fs <boot_partition>`
-    increment_boot_partition_in_blocks=$(convert_size_to_fs_blocks "$device" "$INCREMENT_BOOT_PARTITION_SIZE_IN_BYTES")
-    total_block_count=$(/usr/sbin/tune2fs -l "$device" | /usr/bin/awk '/Block count:/{print $3}')
-    new_fs_size_in_blocks=$(( total_block_count + increment_boot_partition_in_blocks ))
     if [[ "$BOOT_FS_TYPE" == "ext4" ]]; then
+        check_filesystem "$device"
+        increment_boot_partition_in_blocks=$(convert_size_to_fs_blocks "$device" "$INCREMENT_BOOT_PARTITION_SIZE_IN_BYTES")
+        total_block_count=$(/usr/sbin/tune2fs -l "$device" | /usr/bin/awk '/Block count:/{print $3}')
+        new_fs_size_in_blocks=$(( total_block_count + increment_boot_partition_in_blocks ))
         ret=$(/usr/sbin/resize2fs "$device" $new_fs_size_in_blocks 2>&1)
-        status=$?
     elif [[ "$BOOT_FS_TYPE" == "xfs" ]]; then
-        ret=$(/usr/sbin/xfs_growfs "$device" -D $new_fs_size_in_blocks 2>&1)
+        block_size_in_bytes=$(/usr/sbin/xfs_db "$device" -c "sb" -c "print blocksize" |/usr/bin/awk '{print $3}')
+        current_blocks_in_data=$(/usr/sbin/xfs_db "$device" -c "sb" -c "print dblocks" |/usr/bin/awk '{print $3}')
+        increment_boot_partition_in_blocks=$((INCREMENT_BOOT_PARTITION_SIZE_IN_BYTES/block_size_in_bytes))
+        new_fs_size_in_blocks=$((current_blocks_in_data + increment_boot_partition_in_blocks))
+        # xfs_growfs requires the file system to be mounted in order to change its size
+        # Create a temporal directory
+        tmp_dir=$(/usr/bin/mktemp -d)
+        # Mount the boot file system in the temporal directory
+        /usr/bin/mount "$device" "$tmp_dir"
+        ret=$(/usr/sbin/xfs_growfs "$device" -D "$new_fs_size_in_blocks" 2>&1)
+        # Capture the status
         status=$?
+        # Unmount the file system
+        /usr/bin/umount "$device"
     else
         echo "Device $device does not contain an ext4 or xfs file system: $BOOT_FS_TYPE"
         return 
     fi
+        status=$?
     if [[ $status -ne 0 ]]; then
         echo "Failed to resize boot partition '$device': $ret"
         return 
     fi
+    echo "Boot file system increased to $new_fs_size_in_blocks blocks" >&2
 }
 
 activate_volume_group(){

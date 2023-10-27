@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -x
-
 #constants
 EXTEND_DEVICE_PARAM="extend.device"
 EXTEND_SIZE_PARAM="extend.size"
@@ -11,7 +9,6 @@ BOOT_PARTITION_FLAG="boot"
 EXTEND_DEVICE=""
 EXTEND_SIZE=""
 BOOT_PARTITION_NUMBER=""
-
 
 get_boot_partition_number() {
     BOOT_PARTITION_NUMBER=$(/usr/sbin/parted -m "$EXTEND_DEVICE" print  | /usr/bin/sed -n '/^[0-9]*:/p'| /usr/bin/sed -n '/'"$BOOT_PARTITION_FLAG"'/p'| /usr/bin/awk -F':' '{print $1}')
@@ -60,14 +57,13 @@ parse_kernelops(){
 }
 
 main() {
-
     name=$(basename "$0")
     start=$(/usr/bin/date +%s)
     parse_kernelops
     get_boot_partition_number
     disable_lvm_lock
     # run bigboot.sh to increase boot partition and file system size
-    ret=$(sh /usr/bin/bigboot.sh "$EXTEND_DEVICE" "$EXTEND_SIZE")
+    ret=$(sh /usr/bin/bigboot.sh "$EXTEND_DEVICE" "$EXTEND_SIZE" 2>/dev/kmsg) 
     status=$?
     end=$(/usr/bin/date +%s)
     # write the log file
