@@ -8,8 +8,12 @@
       fail_msg: "bigboot_size is empty"
    - name: Capture boot device name
      ansible.builtin.set_fact:
-      extend_device_name:
+      boot_device_name:
        "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | map(attribute='device') | first | regex_replace('[0-9]*', '') }}"
+   - name: Capture boot device current size
+     ansible.builtin.set_fact:
+      boot_device_size:
+       "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | map(attribute='size_total') | first }}"
    - name: Get kernel version
      ansible.builtin.set_fact:
       kernel_version: "{{ ansible_facts.kernel }}"
@@ -20,7 +24,7 @@
      ansible.builtin.command: /usr/sbin/grubby --remove-args={{ bigboot_size_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
      changed_when: true
    - name: Add kernel option to external device
-     ansible.builtin.command: /usr/sbin/grubby --args={{ bigboot_device_name_parameter }}={{ extend_device_name }}
+     ansible.builtin.command: /usr/sbin/grubby --args={{ bigboot_device_name_parameter }}={{ boot_device_name }}
        --update-kernel /boot/vmlinuz-{{ kernel_version }}
      changed_when: true
    - name: Add kernel option to size
@@ -65,3 +69,20 @@
      ansible.builtin.file:
       path: /usr/lib/dracut/modules.d/99extend_boot
       state: absent
+   - name: Retrieve mount points
+     ansible.builtin.setup:
+      gather_subset:
+       - mounts
+   - name: Capture boot device new size
+     ansible.builtin.set_fact:
+      boot_device_new_size:
+       "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | map(attribute='size_total') | first | int }}"
+   - name: Capture expected device size
+     ansible.builtin.set_fact:
+      expected_size: "{{ (bigboot_size | human_to_bytes| int) + (boot_device_size | int) }}"    
+   - name: Validate boot partition new size
+     ansible.builtin.assert:
+      that: 
+        - expected_size == boot_device_new_size
+      msg: 'Boot partition expected size to be {{ expected_size| int | human_readable }} but found {{ boot_device_new_size| int | human_readable }}'
+      
