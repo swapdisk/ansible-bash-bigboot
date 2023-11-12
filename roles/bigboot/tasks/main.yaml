@@ -17,20 +17,6 @@
    - name: Get kernel version
      ansible.builtin.set_fact:
       kernel_version: "{{ ansible_facts.kernel }}"
-   - name: Remove existing kernel option to external device
-     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ bigboot_device_name_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
-     changed_when: true
-   - name: Remove existing kernel option to size
-     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ bigboot_size_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
-     changed_when: true
-   - name: Add kernel option to external device
-     ansible.builtin.command: /usr/sbin/grubby --args={{ bigboot_device_name_parameter }}={{ boot_device_name }}
-       --update-kernel /boot/vmlinuz-{{ kernel_version }}
-     changed_when: true
-   - name: Add kernel option to size
-     ansible.builtin.command: /usr/sbin/grubby --args={{ bigboot_size_parameter }}={{ bigboot_size }}
-       --update-kernel /boot/vmlinuz-{{ kernel_version }}
-     changed_when: true
    - name: Create a backup of the current initramfs
      ansible.builtin.copy:
       remote_src: true
@@ -39,22 +25,24 @@
       mode: "0600"
    - name: Copy extend boot dracut module
      ansible.builtin.copy:
-      src: "{{ role_path }}/files/"
-      dest: /usr/lib/dracut/modules.d/99extend_boot
+      src: "{{ item }}"
+      dest: /usr/lib/dracut/modules.d/99extend_boot/
       mode: "0554"
+     loop:
+     - bigboot.sh
+     - module-setup.sh
+     - sfdisk.static
+   - name: Resolve and copy the shrink-start script
+     ansible.builtin.template:
+      src: increase-boot-partition.sh.j2
+      dest: /usr/lib/dracut/modules.d/99extend_boot/increase-boot-partition.sh
+      mode: '0554'
    - name: Create a new initramfs with the extend boot module
      ansible.builtin.command: /usr/sbin/dracut -a extend_boot --kver {{ kernel_version }} --force
      changed_when: true
    - name: Reboot the server
      ansible.builtin.reboot:
-      post_reboot_delay: 300
-   - name: Remove kernel option for external device
-     ansible.builtin.command: /usr/sbin/grubby
-       --remove-args={{ bigboot_device_name_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
-     changed_when: true
-   - name: Remove kernel option for size
-     ansible.builtin.command: /usr/sbin/grubby --remove-args={{ bigboot_size_parameter }} --update-kernel /boot/vmlinuz-{{ kernel_version }}
-     changed_when: true
+      post_reboot_delay: 30
    - name: Restore previous initramfs
      ansible.builtin.copy:
       remote_src: true
@@ -79,10 +67,9 @@
        "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | map(attribute='size_total') | first | int }}"
    - name: Capture expected device size
      ansible.builtin.set_fact:
-      expected_size: "{{ (bigboot_size | human_to_bytes| int) + (boot_device_size | int) }}"    
+      expected_size: "{{ (bigboot_size | human_to_bytes| int) + (boot_device_size | int) }}"
    - name: Validate boot partition new size
      ansible.builtin.assert:
-      that: 
+      that:
         - expected_size == boot_device_new_size
       msg: 'Boot partition expected size to be {{ expected_size| int | human_readable }} but found {{ boot_device_new_size| int | human_readable }}'
-      
