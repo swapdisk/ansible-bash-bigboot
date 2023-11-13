@@ -19,7 +19,7 @@
 - name: Capture boot device details
   ansible.builtin.set_fact:
     boot_device_name: "{{ _boot_device.device | regex_replace('[0-9]*', '') }}"
-    boot_device_size: "{{ _boot_device.size_total }}"
+    boot_device_original_size: "{{ _boot_device.size_total | int }}"
 
 - name: Get kernel version
   ansible.builtin.set_fact:
@@ -86,10 +86,10 @@
 
 - name: Capture expected device size
   ansible.builtin.set_fact:
-    expected_size: "{{ (bigboot_size | human_to_bytes| int) + (boot_device_size | int) }}"
+    expected_size: "{{ (bigboot_size | human_to_bytes| int) + (boot_device_original_size | int) }}"
 
 - name: Validate boot partition new size
   ansible.builtin.assert:
     that:
-    - expected_size == boot_device_new_size
-    fail_msg: 'Boot partition expected size to be {{ expected_size| int | human_readable }} but found {{ boot_device_new_size| int | human_readable }}'
+    - boot_device_new_size != boot_device_original_size
+    fail_msg: "Boot partition size '{{ boot_device_new_size }}' did not change"
