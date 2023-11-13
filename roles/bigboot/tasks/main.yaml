@@ -12,15 +12,14 @@
     that: bigboot_size | length >0
     fail_msg: "bigboot_size is empty"
 
-- name: Capture boot device name
+- name: Find the boot device
   ansible.builtin.set_fact:
-    boot_device_name:
-       "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | map(attribute='device') | first | regex_replace('[0-9]*', '') }}"
+    _boot_device: "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | first }}"
 
-- name: Capture boot device current size
+- name: Capture boot device details
   ansible.builtin.set_fact:
-    boot_device_size:
-       "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | map(attribute='size_total') | first }}"
+    boot_device_name: "{{ _boot_device.device | regex_replace('[0-9]*', '') }}"
+    boot_device_size: "{{ _boot_device.size_total }}"
 
 - name: Get kernel version
   ansible.builtin.set_fact:
@@ -83,8 +82,7 @@
 
 - name: Capture boot device new size
   ansible.builtin.set_fact:
-    boot_device_new_size:
-      "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | map(attribute='size_total') | first | int }}"
+    boot_device_new_size: "{{ (ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | first).size_total | int }}"
 
 - name: Capture expected device size
   ansible.builtin.set_fact:
