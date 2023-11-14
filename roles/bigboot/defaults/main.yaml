@@ -1,4 +1,1 @@
-bigboot_device_name_parameter: extend.device
-bigboot_size_parameter: extend.size
-bigboot_backup_extension: old
 bigboot_size:

@@ -4,13 +4,17 @@
     gather_subset:
     - "!all"
     - "!min"
-    - kernel
     - mounts
 
 - name: Validate bigboot_size is not empty
   ansible.builtin.assert:
     that: bigboot_size | length >0
     fail_msg: "bigboot_size is empty"
+
+- name: Validate initramfs preflight
+  ansible.builtin.include_role:
+    name: initramfs
+    tasks_from: preflight
 
 - name: Find the boot device
   ansible.builtin.set_fact:
@@ -20,17 +24,6 @@
   ansible.builtin.set_fact:
     boot_device_name: "{{ _boot_device.device | regex_replace('[0-9]*', '') }}"
     boot_device_original_size: "{{ _boot_device.size_total | int }}"
-
-- name: Get kernel version
-  ansible.builtin.set_fact:
-    kernel_version: "{{ ansible_facts.kernel }}"
-
-- name: Create a backup of the current initramfs
-  ansible.builtin.copy:
-    remote_src: true
-    src: /boot/initramfs-{{ kernel_version }}.img
-    dest: /boot/initramfs-{{ kernel_version }}.img.{{ bigboot_backup_extension }}
-    mode: "0600"
 
 - name: Copy extend boot dracut module
   ansible.builtin.copy:
@@ -48,25 +41,11 @@
     dest: /usr/lib/dracut/modules.d/99extend_boot/increase-boot-partition.sh
     mode: '0554'
 
-- name: Create a new initramfs with the extend boot module
-  ansible.builtin.command: /usr/sbin/dracut -a extend_boot --kver {{ kernel_version }} --force
-  changed_when: true
-
-- name: Reboot the server
-  ansible.builtin.reboot:
-    post_reboot_delay: 30
-
-- name: Restore previous initramfs
-  ansible.builtin.copy:
-    remote_src: true
-    src: /boot/initramfs-{{ kernel_version }}.img.{{ bigboot_backup_extension }}
-    dest: /boot/initramfs-{{ kernel_version }}.img
-    mode: "0600"
-
-- name: Remove initramfs backup file
-  ansible.builtin.file:
-    path: /boot/initramfs-{{ kernel_version }}.img.{{ bigboot_backup_extension }}
-    state: absent
+- name: Create the initramfs and reboot to run the module
+  vars:
+    initramfs_add_modules: "extend_boot"
+  ansible.builtin.include_role:
+    name: initramfs
 
 - name: Remove dracut extend boot module
   ansible.builtin.file:

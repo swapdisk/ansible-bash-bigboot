@@ -1,0 +1,3 @@
+initramfs_backup_extension: old
+initramfs_add_modules: ""
+initramfs_post_reboot_delay: 30
