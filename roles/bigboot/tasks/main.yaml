@@ -21,9 +21,9 @@
     _boot_device: "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/boot') | first }}"
 
 - name: Identify the boot device parent
-    ansible.builtin.shell: "lsblk -spnlo name {{ _boot_device.device }}"
-    changed_when: false
-    register: _boot_device_deps
+  ansible.builtin.command: "lsblk -spnlo name {{ _boot_device.device }}"
+  changed_when: false
+  register: _boot_device_deps
 
 - name: Capture boot device details
   ansible.builtin.set_fact:
